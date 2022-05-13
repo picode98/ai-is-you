@@ -31,7 +31,7 @@ class BIYGame:
         sleep(2.0)
         pydirectinput.press('space')  # continue playing
         print('Waiting for map to load...')
-        sleep(10.0)
+        sleep(15.0)
         self._input_state_tensor()  # map is technically a level; read and discard state output
         pydirectinput.press('space')  # enter last level (for now)
         print('Waiting for level to load...')
