@@ -1,5 +1,30 @@
 moving = 0
 
+function dump(o)
+    if type(o) == 'table' then
+        local s = '{ '
+        for k,v in pairs(o) do
+            if type(k) ~= 'number' then k = '"'..k..'"' end
+            s = s .. '['..k..'] = ' .. dump(v) .. ','
+        end
+        return s .. '} '
+    else
+        return tostring(o)
+    end
+end
+
+names_to_indices = {}
+idx = 0
+for i,tile in pairs(tileslist) do
+    if tile.name ~= nil then
+        names_to_indices[tile.name] = idx
+        -- print(tile.name .. ":" .. idx)
+        idx = idx + 1
+    end
+end
+
+print('cfg:' .. idx)
+
 function get_unit_map_str(player_found)
     local tiles = {}
     for i=1,roomsizex-2 do
@@ -8,7 +33,10 @@ function get_unit_map_str(player_found)
             if unitmap[tileid] ~= nil then
                 for k, v in pairs(unitmap[tileid]) do
                     unitObj = mmf.newObject(v)
-                    table.insert(tiles, table.concat({i, j, unitObj.values[TYPE], unitObj.values[DIR]}, ","))
+
+                    if names_to_indices[unitObj.strings[UNITNAME]] ~= nil then
+                        table.insert(tiles, table.concat({i, j, names_to_indices[unitObj.strings[UNITNAME]], unitObj.values[DIR]}, ","))
+                    end
                 end
             end
         end
@@ -32,6 +60,12 @@ table.insert(mod_hook_functions["undoed_after"],
 table.insert(mod_hook_functions["level_start"],
         function()
             print(get_unit_map_str(1))
+        end
+)
+
+table.insert(mod_hook_functions["level_win"],
+        function()
+            print('level_win')
         end
 )
 

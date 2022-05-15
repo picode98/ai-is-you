@@ -1,9 +1,18 @@
-from typing import Set, Dict, Hashable, List, Optional
+from __future__ import annotations
+from typing import Set, Dict, Hashable, List, Optional, Tuple, Any, NamedTuple
 
 import torch
 import numpy as np
 
 from utils import IntTensorMap
+
+
+class StateTreeNode(NamedTuple):
+    state: torch.Tensor
+    action: Any
+    reward: float
+    parent: Optional[StateTreeNode]
+    children: List[StateTreeNode]
 
 
 class RLModel:
@@ -12,14 +21,18 @@ class RLModel:
         self.undo_move = undo_move
         self.bel_state: Optional[torch.Tensor] = None
         self.player_found = None
-        self.previous_actions: IntTensorMap = IntTensorMap()
+        self.previous_action_counts: IntTensorMap = IntTensorMap()
         self.next_move_num: int = 0
         self.checkpoints: List[int] = []
         self.revert_target_move: Optional[int] = None
         self.revert_depth: int = 1
+        self.last_move = None
+        self.state_tree_root: Optional[StateTreeNode] = None
+        self.current_state_node: Optional[StateTreeNode] = None
+        self.replay_buffer: List[Tuple[torch.Tensor, Any, float]] = []  # (state, action, reward) tuples
 
     def explore_move(self):
-        existing_count_map: Dict[Hashable, int] = self.previous_actions.get(self.bel_state)
+        existing_count_map: Dict[Hashable, int] = self.previous_action_counts.get(self.bel_state)
 
         if existing_count_map is None:
             p_map = None
@@ -29,7 +42,28 @@ class RLModel:
 
         return self.all_moves[np.random.choice(np.arange(len(self.all_moves)), 1, p=p_map)[0]]
 
-    def env_feedback(self, new_bel_state: torch.Tensor, player_found: bool):
+    def _reward_for(self, state: torch.Tensor, player_found: bool, win_state: bool):
+        if win_state:
+            return 0
+        elif not player_found:
+            return -100
+        else:
+            return -1
+
+    def env_feedback(self, new_bel_state: torch.Tensor, game_won: bool, player_found: bool):
+        this_reward = self._reward_for(new_bel_state, player_found, game_won)
+
+        if self.last_move is None:
+            self.current_state_node = self.state_tree_root = StateTreeNode(new_bel_state, None, 0.0, None, [])
+        elif self.last_move == self.undo_move:
+            assert self.current_state_node is not None
+            self.current_state_node = self.current_state_node.parent
+        else:
+            new_node = StateTreeNode(state=new_bel_state, action=self.last_move, reward=this_reward,
+                                     parent=self.current_state_node, children=[])
+            self.current_state_node.children.append(new_node)
+            self.current_state_node = new_node
+
         self.bel_state = new_bel_state
         self.player_found = player_found
 
@@ -45,23 +79,52 @@ class RLModel:
             if self.revert_target_move is not None and self.next_move_num <= self.revert_target_move:
                 self.revert_target_move = None
 
+            self.last_move = self.undo_move
             return self.undo_move
 
-        existing_count_map: Dict[Hashable, int] = self.previous_actions.get(self.bel_state)
+        existing_count_map: Dict[Hashable, int] = self.previous_action_counts.get(self.bel_state)
 
         if existing_count_map is not None and len(self.checkpoints) > 0 and self.next_move_num - self.checkpoints[-1] >= 50:
             self.revert_target_move = self.checkpoints[-self.revert_depth] if self.revert_depth <= len(self.checkpoints) else 0
             self._pop_move()
             self.revert_depth += 1
+            self.last_move = self.undo_move
             return self.undo_move
 
 
         move = self.explore_move()
         if existing_count_map is None:
-            self.previous_actions[self.bel_state] = {mv: int(mv == move) for mv in self.all_moves}
+            self.previous_action_counts[self.bel_state] = {mv: int(mv == move) for mv in self.all_moves}
             self.checkpoints.append(self.next_move_num)
         else:
             existing_count_map[move] += 1
 
         self.next_move_num += 1
+        self.last_move = move
         return move
+
+    def _calc_future_reward(self, root_node: StateTreeNode):
+        # This would be cleaner as a recursive function, but the trees can be deeper than the recursion limit.
+        result_stack = [(root_node, [])]
+
+        while True:
+            current_root, current_results = result_stack[-1]
+            if len(current_results) >= len(current_root.children):
+                max_future_reward = 0.0 if len(current_root.children) == 0 else max(current_results)
+                self.replay_buffer.append((current_root.state, current_root.action, max_future_reward))
+                result_stack.pop()
+
+                if len(result_stack) > 0:
+                    # print(f'Pop: {current_root.reward} + {max_future_reward}')
+                    result_stack[-1][1].append(current_root.reward + max_future_reward)
+                else:
+                    break
+            else:
+                # print(f'Push: child {len(current_results)} of {len(current_root.children)}')
+                result_stack.append((current_root.children[len(current_results)], []))
+
+    def update_model(self):
+        assert self.state_tree_root is not None
+        self._calc_future_reward(self.state_tree_root)
+
+        # TODO: Update ML model
