@@ -159,7 +159,7 @@ class RLAgent:
         actual_rewards = torch.tensor([reward for _, action, reward in self.replay_buffer if action is not None],
                                       dtype=torch.float, device=self.model_input_device)
 
-        for start_idx in range(0, len(self.replay_buffer), batch_size):
+        for start_idx in range(0, len(sa_tuples), batch_size):
             self.ml_optimizer.zero_grad()
             input_batch_states = torch.nn.utils.rnn.pack_sequence(
                 [enc_state for enc_state, enc_action in sa_tuples[start_idx:start_idx + batch_size + 1]], enforce_sorted=False)
