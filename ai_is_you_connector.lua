@@ -69,3 +69,9 @@ table.insert(mod_hook_functions["level_win"],
         end
 )
 
+table.insert(mod_hook_functions["level_restart"],
+        function()
+            print(get_unit_map_str(1))
+        end
+)
+

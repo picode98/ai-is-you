@@ -159,6 +159,7 @@ class RLAgent:
         actual_rewards = torch.tensor([reward for _, action, reward in self.replay_buffer if action is not None],
                                       dtype=torch.float, device=self.model_input_device)
 
+        total_loss = 0.0
         for start_idx in range(0, len(sa_tuples), batch_size):
             self.ml_optimizer.zero_grad()
             input_batch_states = torch.nn.utils.rnn.pack_sequence(
@@ -173,6 +174,10 @@ class RLAgent:
             loss: torch.Tensor = self.ml_loss(pred_rewards, actual_rewards[start_idx:start_idx + batch_size + 1])
             loss.backward()
             self.ml_optimizer.step()
+
+            total_loss += torch.sum(loss).item()
+
+        return total_loss / len(sa_tuples)
 
     def reset_level_state(self):
         self.current_state_node = self.state_tree_root = None

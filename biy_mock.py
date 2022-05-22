@@ -102,7 +102,7 @@ class MockBIYGame(BIYGameBase):
 
         super().__init__(self.lua_env.eval('num_tiles'))
 
-        self.lua_env.execute("init(1, 15, 15, 1, 0, 0, 'generaldata', 'generaldata2', 'generaldata3',"
+        self.lua_env.execute("init(1, 12, 12, 1, 0, 0, 'generaldata', 'generaldata2', 'generaldata3',"
                              "'generaldata4', 'generaldata5', 'spritedata', 'vardata', 100, 100)")
         self.lua_env.execute('worldinit()')
         self.lua_env.execute("setupmenu('editor', 'editor2', 'editor3', 'editor4', 'selector', 'placer')")

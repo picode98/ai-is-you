@@ -18,7 +18,7 @@ class IntTensorMap(Dict):
         if submap is None:
             return None
         else:
-            eq_tensor = next((ts for ts in submap.keys() if torch.all(ts == __key)), None)
+            eq_tensor = next((ts for ts in submap.keys() if ts.shape == __key.shape and torch.all(ts == __key)), None)
             if eq_tensor is None:
                 return None
             else:
@@ -39,5 +39,5 @@ class IntTensorMap(Dict):
         if submap is None:
             super().__setitem__(hash_val, {key: value})
         else:
-            eq_tensor = next((ts for ts in submap.keys() if torch.all(ts == key)), None)
+            eq_tensor = next((ts for ts in submap.keys() if ts.shape == key.shape and torch.all(ts == key)), None)
             submap[key if eq_tensor is None else eq_tensor] = value

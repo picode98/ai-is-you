@@ -1,7 +1,9 @@
 import torch
 import pydirectinput
+from tqdm import tqdm
 
 from pathlib import Path
+from sys import stderr
 
 from agent import RLAgent
 from biy_basic_model import BIYBasicModel
@@ -10,7 +12,7 @@ from biy_game_base import BIYMove
 
 
 if __name__ == '__main__':
-    attempts = 20
+    attempts = 100
     turns_per_attempt = 1000
     biy_path = Path('path\\to\\Baba Is You.exe')
     pydirectinput.PAUSE = 0.035
@@ -25,9 +27,9 @@ if __name__ == '__main__':
     agent = RLAgent(all_moves, BIYMove.UNDO, state_cat_sizes, model, ml_device)
     agent.env_feedback(biy_game.current_state, biy_game.game_won, biy_game.player_found)
 
-    for attempt in range(attempts):
+    for attempt in tqdm(range(attempts), desc='Training model...'):
         for _ in range(turns_per_attempt):
-            biy_game.make_move(agent.next_move(0.8 - attempt * 0.04))
+            biy_game.make_move(agent.next_move(0.8))
 
             if biy_game.game_won:
                 print('Game won!')
@@ -35,7 +37,9 @@ if __name__ == '__main__':
 
             agent.env_feedback(biy_game.current_state, biy_game.game_won, biy_game.player_found)
 
-        agent.update_model()
+        total_loss = agent.update_model()
+        print(f'\tAttempt {attempt}: {total_loss}', file=stderr)
+
         agent.reset_level_state()
         biy_game.restart_level()
         agent.env_feedback(biy_game.current_state, biy_game.game_won, biy_game.player_found)

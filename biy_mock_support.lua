@@ -53,6 +53,12 @@ mmf_objstore = {
     generaldata3 = { strings = {}, values = {}, flags = {}},
     generaldata4 = { strings = {}, values = {}, flags = {}},
     generaldata5 = { strings = {}, values = {}, flags = {}},
+    editor = { strings = {}, values = {}, flags = {}},
+    editor2 = { strings = {}, values = {}, flags = {}},
+    editor3 = { strings = {}, values = {}, flags = {}},
+    editor4 = { strings = {}, values = {}, flags = {}},
+    selector = { strings = {}, values = {}, flags = {}},
+    placer = { strings = {}, values = {}, flags = {}},
     units = {}
 }
 
