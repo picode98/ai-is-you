@@ -27,18 +27,24 @@ if __name__ == '__main__':
     agent = RLAgent(all_moves, BIYMove.UNDO, state_cat_sizes, model, ml_device)
     agent.env_feedback(biy_game.current_state, biy_game.game_won, biy_game.player_found)
 
+    rand_prob = 0.8
     for attempt in tqdm(range(attempts), desc='Training model...'):
         for _ in range(turns_per_attempt):
             biy_game.make_move(agent.next_move(0.8))
 
             if biy_game.game_won:
-                print('Game won!')
+                print('\tGame won!')
                 break
 
             agent.env_feedback(biy_game.current_state, biy_game.game_won, biy_game.player_found)
 
-        total_loss = agent.update_model()
-        print(f'\tAttempt {attempt}: {total_loss}', file=stderr)
+        avg_loss = agent.update_model()
+        print(f'\tAttempt {attempt}: avg. loss: {avg_loss}, rand_prob={rand_prob}', file=stderr)
+
+        if biy_game.game_won:
+            rand_prob = max(rand_prob / 2.0, 0.005)
+        else:
+            rand_prob = min(rand_prob * 1.15, 0.8)
 
         agent.reset_level_state()
         biy_game.restart_level()

@@ -1,4 +1,5 @@
 from typing import Dict, Any
+from itertools import chain
 
 import torch
 
@@ -41,3 +42,12 @@ class IntTensorMap(Dict):
         else:
             eq_tensor = next((ts for ts in submap.keys() if ts.shape == key.shape and torch.all(ts == key)), None)
             submap[key if eq_tensor is None else eq_tensor] = value
+
+    def keys(self):
+        return chain(*(submap.keys() for submap in super().values()))
+
+    def values(self):
+        return chain(*(submap.values() for submap in super().values()))
+
+    def items(self):
+        return ((key, self.get(key)) for key in self.keys())

@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+from collections import Counter
+from sys import stderr
 from typing import Dict, Hashable, List, Optional, Tuple, Any, NamedTuple
 
 import torch
@@ -150,10 +153,78 @@ class RLAgent:
         return torch.concat(input_components, dim=1), torch.nn.functional.one_hot(torch.tensor([int(action)], dtype=torch.long),
                                                             num_classes=len(self.all_moves))
 
+    def _compress_replay_buffer(self, target_size: int):
+        if len(self.replay_buffer) <= target_size:
+            return
+
+        base_keep_prob = target_size / len(self.replay_buffer)
+
+        sa_rewards = IntTensorMap()
+        for state, action, reward in self.replay_buffer:
+            subdict = sa_rewards.get(state)
+            if subdict is None:
+                sa_rewards[state] = {action: [reward]}
+            elif action not in subdict:
+                subdict[action] = [reward]
+            else:
+                subdict[action].append(reward)
+
+        len_counts = Counter(len(lst) for subdict in sa_rewards.values() for lst in subdict.values())
+        sorted_counts = [(len_counts[i] if i in len_counts else 0) for i in range(1, max(len_counts.keys()) + 1)]
+
+        result_size = 0
+        take_full_max = 0
+        take_some_indices = None
+
+        for i in range(len(sorted_counts)):
+            new_items = sum(sorted_counts[i:])
+            if result_size + new_items > target_size:
+                num_to_keep = target_size - result_size
+                take_some_indices = set(np.random.choice(np.arange(new_items), num_to_keep, replace=False))
+                assert len(take_some_indices) == num_to_keep
+                break
+            else:
+                result_size += new_items
+                take_full_max = i + 1
+
+        assert take_some_indices is not None  # Sum of counts should be total replay buffer length, which is greater than
+                                              # target_size; hence we should exceed target_size during the loop.
+
+        if take_full_max == 0:
+            print('WARNING: Replay buffer is saturated, and some states will be dropped. Consider increasing target_size.', file=stderr)
+
+        new_buffer = []
+        take_some_index = 0
+        for state in sa_rewards.keys():
+            for action, value_list in sa_rewards[state].items():
+                if len(value_list) <= take_full_max:
+                    sample_len = len(value_list)
+                else:
+                    if take_some_index in take_some_indices:
+                        sample_len = take_full_max + 1
+                    else:
+                        sample_len = take_full_max
+                    take_some_index += 1
+
+                if len(value_list) <= sample_len:
+                    new_buffer += [(state, action, reward) for reward in value_list]
+                elif sample_len > 0:
+                    sorted_rewards = sorted(value_list)
+                    partition_bounds = [int(len(value_list) * i / sample_len) for i in range(sample_len + 1)]
+                    resampled_values = [sum(sorted_rewards[partition_bounds[i]:partition_bounds[i + 1]]) /
+                                        (partition_bounds[i + 1] - partition_bounds[i]) for i in range(sample_len)]
+                    new_buffer += [(state, action, reward) for reward in resampled_values]
+
+        assert len(new_buffer) == target_size
+        assert take_some_index == sum(sorted_counts[take_full_max:])
+
+        self.replay_buffer = new_buffer
+
     def update_model(self, batch_size: int = 500):
         assert self.state_tree_root is not None
 
         self._calc_future_reward(self.state_tree_root)
+        self._compress_replay_buffer(8000)
 
         sa_tuples = [self._enc_state_action(state, action) for state, action, _ in self.replay_buffer if action is not None]
         actual_rewards = torch.tensor([reward for _, action, reward in self.replay_buffer if action is not None],
